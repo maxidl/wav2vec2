@@ -232,10 +232,7 @@ def main():
 
     train_dataset = CustomWav2Vec2Dataset('train')
     eval_dataset = CustomWav2Vec2Dataset('eval')
-
-    for a in tqdm(eval_dataset):
-        _ = a
-
+    
     # Load pretrained model and tokenizer
     #
     # Distributed training:
