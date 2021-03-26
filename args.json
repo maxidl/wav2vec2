@@ -3,6 +3,7 @@
     "dataset_config_name": "de",
     "output_dir":"./wav2vec2-large-xlsr-de-test",
     "preprocessing_num_workers": 32,
+    "datasets_in_memory":1,
 
     "overwrite_output_dir": 1,
     "num_train_epochs":5,

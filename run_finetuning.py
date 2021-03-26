@@ -201,7 +201,7 @@ def main():
     # Get the datasets:
     class CustomWav2Vec2Dataset(torch.utils.data.Dataset):
 
-        def __init__(self, split='train', in_memory=True) -> None:
+        def __init__(self, split='train', in_memory=True):
             super().__init__()
             assert split in {'train', 'eval'}
             self.split = split
@@ -230,9 +230,12 @@ def main():
             return {'input_values': input_values.tolist()[0], 'labels': label}
 
 
-    train_dataset = CustomWav2Vec2Dataset('train')
-    eval_dataset = CustomWav2Vec2Dataset('eval')
-    
+    train_dataset = CustomWav2Vec2Dataset('train', data_args.datasets_in_memory)
+    eval_dataset = CustomWav2Vec2Dataset('eval', data_args.datasets_in_memory)
+
+    for a in tqdm(eval_dataset):
+        _ = a
+
     # Load pretrained model and tokenizer
     #
     # Distributed training:

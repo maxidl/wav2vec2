@@ -99,3 +99,7 @@ class DataTrainingArguments:
         default=[",", "?", ".", "!", "-", ";", ":", '""', "%", "'", '"', "�"],
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
+
+    datasets_in_memory: bool = field(
+        default=False, metadata={"help": "Load datasets into memory before training."}
+    )
