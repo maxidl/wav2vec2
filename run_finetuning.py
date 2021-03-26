@@ -205,12 +205,21 @@ def get_input_len(f):
 
 
 def main():
+    # See all possible arguments in src/transformers/training_args.py
+    # or by passing the --help flag to this script.
+    # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    args_file = './args.json'
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
-    model_args, data_args, training_args = parser.parse_json_file(args_file)
+    if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+        # If we pass only one argument to the script and it's the path to a json file,
+        # let's parse it to get our arguments.
+        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+    else:
+        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    # torch.set_num_threads(data_args.preprocessing_num_workers)
+    # args_file = './args.json'
+    # parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    # model_args, data_args, training_args = parser.parse_json_file(args_file)
 
     # Detecting last checkpoint.
     last_checkpoint = None
@@ -244,8 +253,9 @@ def main():
     if is_main_process(training_args.local_rank):
         transformers.utils.logging.set_verbosity_info()
     logger.info("Training/evaluation parameters")
+
     for pair in sorted(vars(training_args).items(), key=lambda kv: kv[0]):
-        print(pair)
+        logging.info(pair)
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
@@ -359,7 +369,7 @@ def main():
         else:
             checkpoint = None
 
-        print('Training...')
+        logger.info('Training...')
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()
 

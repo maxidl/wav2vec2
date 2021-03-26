@@ -18,8 +18,9 @@ wav2vec2 finetuning on common voice german.
 - RAM requirement: <5GB
 
 ## Training
-- `run_finetuning.py` does the training.
+- `run_finetuning.py` does the training. Use `'finetune.sh` or `finetune_distributed.sh`.
 - RAM requirement: <16GB
+- One epoch for 
 
 
 ## Environment Setup with conda
