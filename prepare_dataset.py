@@ -108,6 +108,7 @@ def load_resample_save(f):
         speech_array, sampling_rate = torchaudio.load(f)
         speech_array_resampled = resampler(speech_array)
         input_values = processor(speech_array_resampled, sampling_rate=16_000).input_values
+        input_values = torch.from_numpy(input_values).float().flatten()
         torch.save(input_values, new_path)
     return str(new_path)
 
@@ -158,3 +159,6 @@ eval_dataset = eval_dataset.map(
 # # save for disk, ready for training
 pq.write_table(train_dataset.data, f'./{data_args.dataset_config_name}.train.parquet')
 pq.write_table(eval_dataset.data, f'./{data_args.dataset_config_name}.eval.parquet')
+
+# save processor for training
+processor.save_pretrained(training_args.output_dir)
