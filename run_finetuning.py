@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
+import collections
 from multiprocessing import Pool
 
 from tqdm.auto import tqdm
@@ -26,8 +27,8 @@ from transformers import (
     Wav2Vec2Processor,
     set_seed,
 )
-
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.trainer_pt_utils import LengthGroupedSampler, DistributedLengthGroupedSampler
 
 from argument_classes import ModelArguments, DataTrainingArguments
 
@@ -150,8 +151,57 @@ class CTCTrainer(Trainer):
         return loss.detach()
 
 
+# add aggressive smoothing to progress bar for better estimate
+class CustomProgressBarCallback(transformers.trainer_callback.ProgressCallback):
+    def on_train_begin(self, args, state, control, **kwargs):
+        if state.is_local_process_zero:
+            self.training_bar = tqdm(total=state.max_steps, smoothing=0.1)
+        self.current_step = 0
+
+
+# solution from https://discuss.huggingface.co/t/spanish-asr-fine-tuning-wav2vec2/4586/6
+class GroupedLengthsTrainer(CTCTrainer):
+    # length_field_name should possibly be part of TrainingArguments instead
+    def __init__(self, train_seq_lengths:List[int], *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.train_seq_lengths = train_seq_lengths
+    
+    def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
+        if isinstance(self.train_dataset, torch.utils.data.IterableDataset) or not isinstance(
+            self.train_dataset, collections.abc.Sized
+        ):
+            return None
+
+        # Build the sampler.
+        if self.args.group_by_length:
+            # lengths = self.train_dataset[self.length_field_name] if self.length_field_name is not None else None
+            model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
+            if self.args.world_size <= 1:
+                return LengthGroupedSampler(
+                    self.train_dataset, self.args.train_batch_size, lengths=self.train_seq_lengths, model_input_name=model_input_name
+                )
+            else:
+                return DistributedLengthGroupedSampler(
+                    self.train_dataset,
+                    self.args.train_batch_size,
+                    num_replicas=self.args.world_size,
+                    rank=self.args.process_index,
+                    lengths=self.train_seq_lengths,
+                    model_input_name=model_input_name,
+                )
+
+        else:
+            return super()._get_train_sampler()
+
+
 def load_speech(f):
-    return torch.load(f).squeeze()
+    return torch.load(f).squeeze().tolist()
+
+
+
+def get_input_len(f):
+    t = torch.load(f).squeeze().tolist()
+    return len(t)
 
 
 def main():
@@ -160,7 +210,7 @@ def main():
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_json_file(args_file)
 
-    torch.set_num_threads(data_args.preprocessing_num_workers)
+    # torch.set_num_threads(data_args.preprocessing_num_workers)
 
     # Detecting last checkpoint.
     last_checkpoint = None
@@ -193,44 +243,41 @@ def main():
     # Set the verbosity to info of the Transformers logger (on main process only):
     if is_main_process(training_args.local_rank):
         transformers.utils.logging.set_verbosity_info()
-    logger.info("Training/evaluation parameters %s", training_args)
+    logger.info("Training/evaluation parameters")
+    for pair in sorted(vars(training_args).items(), key=lambda kv: kv[0]):
+        print(pair)
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
+
     # Get the datasets:
     class CustomWav2Vec2Dataset(torch.utils.data.Dataset):
 
-        def __init__(self, split='train', in_memory=True):
+        def __init__(self, split='train'):
             super().__init__()
             assert split in {'train', 'eval'}
             self.split = split
-            self.in_memory = in_memory
             self.path = Path(f'./{data_args.dataset_config_name}.{split}.parquet')
             df = pd.read_parquet(self.path)
-            self.labels = df['labels'].tolist()
+            self.labels = [x.tolist() for x in df['labels'].tolist()]
             self.paths = df['path'].tolist()
 
-            if self.in_memory:
-                self.input_values = [load_speech(p) for p in tqdm(self.paths, miniters=100, desc=f'loading {self.split} speeches', total=len(self.paths))]
+            if split == 'train':
+                with Pool(training_args.dataloader_num_workers) as p:
+                    self.input_seq_lengths = list(tqdm(p.imap(get_input_len, self.paths), total=len(self.paths), miniters=100, desc='getting train input lengths'))
 
         def __len__(self):
             return len(self.paths)
 
         def __getitem__(self, idx):
-            # print(idx, self.split)
-            if self.in_memory:
-                inputs = self.input_values[idx]
-            else:
-                inputs = load_speech(self.paths[idx])
+            inputs = load_speech(self.paths[idx])
             label = self.labels[idx]
             return {'input_values': inputs, 'labels': label}
 
 
-    train_dataset = CustomWav2Vec2Dataset('train', data_args.datasets_in_memory)
-    eval_dataset = CustomWav2Vec2Dataset('eval', data_args.datasets_in_memory)
-
-    # lenghts = [len(x['input_values']) for x in tqdm(train_dataset, miniters=100)]
+    train_dataset = CustomWav2Vec2Dataset('train')
+    eval_dataset = CustomWav2Vec2Dataset('eval')
 
     # Load pretrained model and tokenizer
     #
@@ -288,8 +335,9 @@ def main():
     # Data collator
     data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
 
-    # Initialize our Trainer
-    trainer = CTCTrainer(
+    # Initialize Trainer
+    
+    trainer = GroupedLengthsTrainer(
         model=model,
         data_collator=data_collator,
         args=training_args,
@@ -297,7 +345,10 @@ def main():
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
         tokenizer=processor.feature_extractor,
+        train_seq_lengths=train_dataset.input_seq_lengths
     )
+    trainer.remove_callback(transformers.trainer_callback.ProgressCallback)
+    trainer.add_callback(CustomProgressBarCallback)
 
     # Training
     if training_args.do_train:
