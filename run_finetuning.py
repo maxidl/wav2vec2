@@ -151,7 +151,7 @@ class CTCTrainer(Trainer):
 
 
 def load_speech(f):
-    return torch.load(f).squeeze().numpy()
+    return torch.load(f).squeeze()
 
 
 def main():
@@ -212,45 +212,43 @@ def main():
             self.paths = df['path'].tolist()
 
             if self.in_memory:
-                with Pool(data_args.preprocessing_num_workers) as p:
-                    self.input_values = list(tqdm(p.imap(load_speech, self.paths), miniters=100, desc=f'loading {self.split} speeches', total=len(self.paths)))
+                self.input_values = [load_speech(p) for p in tqdm(self.paths, miniters=100, desc=f'loading {self.split} speeches', total=len(self.paths))]
 
         def __len__(self):
             return len(self.paths)
 
         def __getitem__(self, idx):
-            print(idx, self.split)
-            # speech = torch.load(self.paths[idx]).squeeze().numpy()
-            # input_values = processor(speech, sampling_rate=16_000).input_values
+            # print(idx, self.split)
             if self.in_memory:
-                input_values = self.input_values[idx]
+                inputs = self.input_values[idx]
             else:
-                input_values = load_speech(self.paths[idx])
+                inputs = load_speech(self.paths[idx])
             label = self.labels[idx]
-            return {'input_values': input_values.tolist()[0], 'labels': label}
+            return {'input_values': inputs, 'labels': label}
 
 
     train_dataset = CustomWav2Vec2Dataset('train', data_args.datasets_in_memory)
     eval_dataset = CustomWav2Vec2Dataset('eval', data_args.datasets_in_memory)
 
-    # for a in tqdm(eval_dataset):
-    #     _ = a
+    # lenghts = [len(x['input_values']) for x in tqdm(train_dataset, miniters=100)]
 
     # Load pretrained model and tokenizer
     #
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-    tokenizer = Wav2Vec2CTCTokenizer(
-        "vocab.json",
-        unk_token="[UNK]",
-        pad_token="[PAD]",
-        word_delimiter_token="|",
-    )
-    feature_extractor = Wav2Vec2FeatureExtractor(
-        feature_size=1, sampling_rate=16_000, padding_value=0.0, do_normalize=True, return_attention_mask=True
-    )
-    processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+    # tokenizer = Wav2Vec2CTCTokenizer(
+    #     "vocab.json",
+    #     unk_token="[UNK]",
+    #     pad_token="[PAD]",
+    #     word_delimiter_token="|",
+    # )
+    # feature_extractor = Wav2Vec2FeatureExtractor(
+    #     feature_size=1, sampling_rate=16_000, padding_value=0.0, do_normalize=True, return_attention_mask=True
+    # )
+    # processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+
+    processor = Wav2Vec2Processor.from_pretrained(training_args.output_dir)
 
     model = Wav2Vec2ForCTC.from_pretrained(
         model_args.model_name_or_path,
@@ -314,9 +312,10 @@ def main():
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()
 
+        # below is already done in prepare_dataset.py
         # save the feature_extractor and the tokenizer
-        if is_main_process(training_args.local_rank):
-            processor.save_pretrained(training_args.output_dir)
+        # if is_main_process(training_args.local_rank):
+        #     processor.save_pretrained(training_args.output_dir)
 
         metrics = train_result.metrics
         max_train_samples = (
