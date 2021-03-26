@@ -24,6 +24,7 @@ parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArgume
 model_args, data_args, training_args = parser.parse_json_file(args_file)
 
 # increasing number of threads for torchaudio resample
+print(f'Using {data_args.preprocessing_num_workers} threads')
 torch.set_num_threads(data_args.preprocessing_num_workers)
 
 # Get the datasets:
@@ -92,9 +93,10 @@ processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tok
 
 # =======================================================
 # The following part is modified to:
-#   - load resample and save audio files into raw tensors
-#   - process labels as before, but do not process the audio tensors (these will be processed during training)
-#   - save datasets containing the paths and labels to disk
+#   - load, resample, process and save audio files into raw tensors
+#   - process labels as before
+#   - save datasets containing the paths and labels to disk, as arrow table in parquet format
+#   - save processor to disk, for reuse in training script (I got a hint that it is not deterministic)
 
 # load and resample audio, save as raw tensors
 resampler = torchaudio.transforms.Resample(48_000, 16_000)
