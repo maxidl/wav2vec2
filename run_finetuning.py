@@ -151,7 +151,7 @@ class CTCTrainer(Trainer):
         return loss.detach()
 
 
-# add aggressive smoothing to progress bar for better estimate
+# add less aggressive smoothing to progress bar for better estimate
 class CustomProgressBarCallback(transformers.trainer_callback.ProgressCallback):
     def on_train_begin(self, args, state, control, **kwargs):
         if state.is_local_process_zero:
@@ -255,7 +255,7 @@ def main():
     logger.info("Training/evaluation parameters")
 
     for pair in sorted(vars(training_args).items(), key=lambda kv: kv[0]):
-        logging.info(pair)
+        print(pair)
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
@@ -346,7 +346,6 @@ def main():
     data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
 
     # Initialize Trainer
-    
     trainer = GroupedLengthsTrainer(
         model=model,
         data_collator=data_collator,

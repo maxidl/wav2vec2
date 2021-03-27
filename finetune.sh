@@ -1,13 +1,13 @@
 python run_finetuning.py \
 --model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
 --dataset_config_name="de" \
---output_dir=./wav2vec2-large-xlsr-german \
+--output_dir=./wav2vec2-large-xlsr-german2 \
 --preprocessing_num_workers="16" \
 --overwrite_output_dir \
 --num_train_epochs="5" \
---per_device_train_batch_size="16" \
---per_device_eval_batch_size="16" \
---learning_rate="2e-4" \
+--per_device_train_batch_size="50" \
+--per_device_eval_batch_size="50" \
+--learning_rate="2e-5" \
 --warmup_steps="500" \
 --evaluation_strategy="steps" \
 --save_steps="10000" \
