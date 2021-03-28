@@ -1,18 +1,18 @@
 python run_finetuning.py \
 --model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
 --dataset_config_name="de" \
---output_dir=./wav2vec2-large-xlsr-german2 \
+--output_dir=./wav2vec2-large-xlsr-german \
 --preprocessing_num_workers="16" \
 --overwrite_output_dir \
---num_train_epochs="5" \
---per_device_train_batch_size="50" \
---per_device_eval_batch_size="50" \
---learning_rate="2e-5" \
+--num_train_epochs="20" \
+--per_device_train_batch_size="64" \
+--per_device_eval_batch_size="32" \
+--learning_rate="1e-4" \
 --warmup_steps="500" \
 --evaluation_strategy="steps" \
 --save_steps="10000" \
 --eval_steps="10000" \
---logging_steps="1000" \
+--logging_steps="5000" \
 --save_total_limit="3" \
 --freeze_feature_extractor \
 --activation_dropout="0.055" \
@@ -26,3 +26,4 @@ python run_finetuning.py \
 --do_eval \
 --dataloader_num_workers="16" \
 --group_by_length
+
