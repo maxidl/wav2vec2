@@ -25,6 +25,7 @@ I made some changes to the [run_common_voice.py script](https://github.com/huggi
 - `run_finetuning.py` does the training. Use `'finetune.sh`, `finetune_distributed.sh` or `args.json` to specify all the arguments.
 - Custom dataset to load the output of `preprocess_dataset.py`.
 - includes improvements for `group_by_length` problem, see [forum post](https://discuss.huggingface.co/t/spanish-asr-fine-tuning-wav2vec2/4586/5). The dataset is iterated in parallel by multiple workers to quickly get the lengths of each input sequence.
+- Limits the maximum sequence length during trainin to the 99% quantile to save gpu memory and allow for larger batch sizes.
 - includes a less aggressively smoothed trainer progress bar for a better training time estimate.
 
 - RAM requirement: while training itself takes <15GB on full `de`, the evaluation during training still requires ~170GB RAM. ToDo: compute WER in chunks.
